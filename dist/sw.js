@@ -1,5 +1,5 @@
 /* Cache only the app's static files. Questionnaire responses remain in local storage. */
-const CACHE = 'heck-shell-v2';
+const CACHE = 'heck-shell-v3';
 const FILES = ['/', '/index.html', '/style.css', '/schema.js', '/app.js', '/offline.js', '/manifest.webmanifest', '/assets/icon.svg', '/assets/emblema.png', '/assets/questionario.pdf'];
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
