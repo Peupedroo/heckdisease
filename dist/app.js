@@ -12,13 +12,13 @@ function collect(){document.querySelectorAll('#fields [name]').forEach(el=>{if(e
 function drawStep(){const sec=schema[step];$('#steps').innerHTML=short.map((t,i)=>`<button type="button" class="${i===step?'active':''}" data-step="${i}">${String(i+1).padStart(2,'0')} &nbsp; ${t}</button>`).join('');document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{if(!checkpoint())return;step=+b.dataset.step;current._step=step;checkpoint();drawStep()});$('#mobile-step').innerHTML=short.map((t,i)=>`<option value="${i}" ${i===step?'selected':''}>${i+1}. ${t}</option>`).join('');$('#step-label').textContent=`Etapa ${step+1} de 8`;$('#progress-label').textContent=Math.round((step+1)/8*100)+'% das etapas';$('#progressbar').style.width=(step+1)/8*100+'%';let html=`<h2>${esc(sec.title)}</h2>`;
 if(step===0)html+='<p class="notice">Identifique o participante por código. O nome completo deve ser mantido em arquivo separado da base de pesquisa; ele não é coletado neste app.</p>';
 if(step===3)html+='<p class="notice">Seção opcional e confidencial. Aplicar individualmente, somente quando adequado à idade e ao protocolo ético aprovado. Pode ser deixada em branco. A doença de Heck não comprova transmissão sexual.</p>';
-html+='<div class="fields-grid">';sec.fields.forEach(f=>{if(f.id==='s1q2')return;let v=current[f.id]||'';html+=`<${multi.has(f.id)?'div':'label'} class="${multi.has(f.id)||/Observações|Descrição|Resultado/.test(f.label)?'wide':''}">${esc(f.label)}${f.id==='s1q1'?' *':''}`;
+html+='<div class="fields-grid">';sec.fields.forEach(f=>{if(f.id==='s1q2')return;let v=current[f.id]||'';html+=`<${multi.has(f.id)?'div':'label'} class="${multi.has(f.id)||/Observações|Descrição|Resultado/.test(f.label)?'wide':''}">${esc(f.label)}${f.id==='s1q1'?' *':''}${['s8q7','s8q8'].includes(f.id)?' <small>(obrigatório para concluir)</small>':''}`;
 if(f.options.length&&multi.has(f.id)){html+='<div class="checks">'+f.options.map(o=>`<label><input type="checkbox" name="${f.id}" value="${esc(o)}" ${Array.isArray(v)&&v.includes(o)?'checked':''}> ${esc(o)}</label>`).join('')+'</div>'}
 else if(f.options.length)html+=`<select name="${f.id}"><option value="">Selecione ou deixe sem resposta</option>${f.options.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
 else{let type=/Data da entrevista|Data da avaliação/.test(f.label)?'date':/Idade|dimensão/.test(f.label)?'number':'text';html+=/Observações|Descrição|Resultado/.test(f.label)?`<textarea name="${f.id}">${esc(v)}</textarea>`:`<input name="${f.id}" type="${type}" ${type==='number'?'min="0" step="any"':''} ${f.id==='s1q1'?'required maxlength="80"':''} value="${esc(v)}">`}
-html+=multi.has(f.id)?'</div>':'</label>'});html+='</div>';if(step===7)html+='<p class="notice">A conclusão exige consentimento registrado e assentimento quando aplicável. Registros sem consentimento podem ser salvos como rascunho.</p>';$('#fields').innerHTML=html;$('#prev').disabled=step===0;$('#next').textContent=step===7?'Concluir coleta ✓':'Próxima etapa →';$('#save-status').textContent='Respostas salvas automaticamente neste dispositivo.'}
+html+=multi.has(f.id)?'</div>':'</label>'});html+='</div>';if(step===7)html+='<p class="notice">A conclusão exige consentimento registrado e assentimento quando aplicável. Registros sem consentimento podem ser salvos como rascunho.</p><p id="consent-error" class="field-error" role="alert" hidden></p>';$('#fields').innerHTML=html;$('#prev').disabled=step===0;$('#next').textContent=step===7?'Concluir coleta ✓':'Próxima etapa →';$('#save-status').textContent='Respostas salvas automaticamente neste dispositivo.'}
 function save(complete=false){collect();if(!String(current.s1q1||'').trim()){notify('Informe o código do participante na etapa 1.');step=0;drawStep();return false}if(records.some(r=>r.id!==current.id&&r.s1q1===current.s1q1)){notify('Já existe um participante com este código.');return false}if(complete&&(current.s8q7!=='Sim'||!['Sim','Não se aplica'].includes(current.s8q8))){notify('Confira consentimento e assentimento antes de concluir.');return false}current.status=complete?'Concluído':'Rascunho';current._step=step;current.updatedAt=new Date().toISOString();let old=records;records=records.filter(r=>r.id!==current.id).concat(structuredClone(current));if(!persist()){records=old;return false}dirty=false;if(complete){try{localStorage.removeItem(DRAFT_KEY)}catch{}editing=false}else checkpoint();notify(complete?'Coleta concluída e salva.':'Rascunho salvo neste dispositivo.');render();return true}
-$('#form').onsubmit=e=>{e.preventDefault();if(!checkpoint())return;if(step<7){step++;current._step=step;checkpoint();drawStep();window.scrollTo(0,0)}else if(save(true))home(true)};
+$('#form').onsubmit=e=>{e.preventDefault();if(!checkpoint())return;if(step<7){step++;current._step=step;checkpoint();drawStep();window.scrollTo(0,0)}else askConclude()};
 $('#save').onclick=()=>save();
 $('#prev').onclick=()=>{if(!checkpoint())return;if(step>0)step--;current._step=step;checkpoint();drawStep();window.scrollTo(0,0)};
 $('#mobile-step').onchange=e=>{if(!checkpoint())return;step=+e.target.value;current._step=step;checkpoint();drawStep()};
@@ -60,4 +60,31 @@ $('#resume-draft').onclick=()=>{try{const draft=JSON.parse(localStorage.getItem(
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')checkpoint()});
 window.addEventListener('pagehide',checkpoint);
 window.addEventListener('beforeunload',e=>{if(!checkpoint()){e.preventDefault();e.returnValue=''}});
+
+// Confirmação de consentimento antes de concluir a coleta.
+function consentError(){
+  if(current.s8q7!=='Sim')return 'Para concluir, selecione "Sim" em "Consentimento registrado?". Se o consentimento ainda não foi obtido, use "Salvar rascunho".';
+  if(!['Sim','Não se aplica'].includes(current.s8q8))return 'Para concluir, responda "Assentimento quando aplicável?" com "Sim" ou "Não se aplica".';
+  return '';
+}
+function askConclude(){
+  collect();
+  const msg=consentError(),err=$('#consent-error');
+  document.querySelectorAll('[name="s8q7"],[name="s8q8"]').forEach(el=>el.removeAttribute('aria-invalid'));
+  if(msg){
+    err.textContent=msg;err.hidden=false;
+    const el=$(`[name="${current.s8q7!=='Sim'?'s8q7':'s8q8'}"]`);
+    el.setAttribute('aria-invalid','true');el.scrollIntoView({block:'center',behavior:'smooth'});el.focus({preventScroll:true});
+    return;
+  }
+  err.hidden=true;
+  $('#confirm-summary').innerHTML=`Participante <b>${esc(current.s1q1||'sem código')}</b><br>Consentimento registrado: <b>${esc(current.s8q7)}</b><br>Assentimento: <b>${esc(current.s8q8)}</b><br><br>Ao confirmar, a coleta será marcada como “Concluído”.`;
+  const d=$('#confirm-dialog');
+  if(d.showModal)d.showModal();else if(confirm('Confirmar o consentimento e concluir a coleta?'))finishCollect();
+}
+function finishCollect(){if(save(true))home(true)}
+$('#confirm-cancel').onclick=()=>$('#confirm-dialog').close();
+$('#confirm-ok').onclick=()=>{$('#confirm-dialog').close();finishCollect()};
+$('#form').addEventListener('change',()=>{const e=$('#consent-error');if(e)e.hidden=true});
+
 $('#today').textContent=new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'});render();showResume();
