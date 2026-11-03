@@ -92,7 +92,7 @@ $('#today').textContent=new Date().toLocaleDateString('pt-BR',{day:'numeric',mon
 // ===== Envio para o Google Planilhas (via Google Apps Script) =====
 // 1) Cole aqui a URL do app da Web gerada na implantação do Apps Script.
 // 2) Use o mesmo TOKEN que está no arquivo Codigo.gs.
-const SHEETS_URL='COLE_AQUI_A_URL_DO_WEB_APP';
+const SHEETS_URL='https://script.google.com/macros/s/AKfycbxxdhBizzpfzVeHnZw725irE7_fucKk43xVkt1Oim07_j8nVsQ_y6kPuj91D2GXpStI/exec';
 const SHEETS_TOKEN='troque-por-uma-senha-longa';
 const SYNC_KEY='heck-sync-queue-v1';
 let syncing=false;
