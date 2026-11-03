@@ -17,7 +17,7 @@ if(f.options.length&&multi.has(f.id)){html+='<div class="checks">'+f.options.map
 else if(f.options.length)html+=`<select name="${f.id}"><option value="">Selecione ou deixe sem resposta</option>${f.options.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
 else{let type=/Data da entrevista|Data da avaliação/.test(f.label)?'date':/Idade|dimensão/.test(f.label)?'number':'text';html+=/Observações|Descrição|Resultado/.test(f.label)?`<textarea name="${f.id}">${esc(v)}</textarea>`:`<input name="${f.id}" type="${type}" ${type==='number'?'min="0" step="any"':''} ${f.id==='s1q1'?'required maxlength="80"':''} value="${esc(v)}">`}
 html+=multi.has(f.id)?'</div>':'</label>'});html+='</div>';if(step===7)html+='<p class="notice">A conclusão exige consentimento registrado e assentimento quando aplicável. Registros sem consentimento podem ser salvos como rascunho.</p><p id="consent-error" class="field-error" role="alert" hidden></p>';$('#fields').innerHTML=html;$('#prev').disabled=step===0;$('#next').textContent=step===7?'Concluir coleta ✓':'Próxima etapa →';$('#save-status').textContent='Respostas salvas automaticamente neste dispositivo.'}
-function save(complete=false){collect();if(!String(current.s1q1||'').trim()){notify('Informe o código do participante na etapa 1.');step=0;drawStep();return false}if(records.some(r=>r.id!==current.id&&r.s1q1===current.s1q1)){notify('Já existe um participante com este código.');return false}if(complete&&(current.s8q7!=='Sim'||!['Sim','Não se aplica'].includes(current.s8q8))){notify('Confira consentimento e assentimento antes de concluir.');return false}current.status=complete?'Concluído':'Rascunho';current._step=step;current.updatedAt=new Date().toISOString();let old=records;records=records.filter(r=>r.id!==current.id).concat(structuredClone(current));if(!persist()){records=old;return false}dirty=false;if(complete){try{localStorage.removeItem(DRAFT_KEY)}catch{}editing=false}else checkpoint();notify(complete?'Coleta concluída e salva.':'Rascunho salvo neste dispositivo.');render();return true}
+function save(complete=false){collect();if(!String(current.s1q1||'').trim()){notify('Informe o código do participante na etapa 1.');step=0;drawStep();return false}if(records.some(r=>r.id!==current.id&&r.s1q1===current.s1q1)){notify('Já existe um participante com este código.');return false}if(complete&&(current.s8q7!=='Sim'||!['Sim','Não se aplica'].includes(current.s8q8))){notify('Confira consentimento e assentimento antes de concluir.');return false}current.status=complete?'Concluído':'Rascunho';current._step=step;current.updatedAt=new Date().toISOString();let old=records;records=records.filter(r=>r.id!==current.id).concat(structuredClone(current));if(!persist()){records=old;return false}dirty=false;if(complete){try{localStorage.removeItem(DRAFT_KEY)}catch{}editing=false}else checkpoint();notify(complete?'Coleta concluída e salva.':'Rascunho salvo neste dispositivo.');render();if(complete){queueSync(current.id);syncPending()}return true}
 $('#form').onsubmit=e=>{e.preventDefault();if(!checkpoint())return;if(step<7){step++;current._step=step;checkpoint();drawStep();window.scrollTo(0,0)}else askConclude()};
 $('#save').onclick=()=>save();
 $('#prev').onclick=()=>{if(!checkpoint())return;if(step>0)step--;current._step=step;checkpoint();drawStep();window.scrollTo(0,0)};
@@ -88,3 +88,41 @@ $('#confirm-ok').onclick=()=>{$('#confirm-dialog').close();finishCollect()};
 $('#form').addEventListener('change',()=>{const e=$('#consent-error');if(e)e.hidden=true});
 
 $('#today').textContent=new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'});render();showResume();
+
+// ===== Envio para o Google Planilhas (via Google Apps Script) =====
+// 1) Cole aqui a URL do app da Web gerada na implantação do Apps Script.
+// 2) Use o mesmo TOKEN que está no arquivo Codigo.gs.
+const SHEETS_URL='COLE_AQUI_A_URL_DO_WEB_APP';
+const SHEETS_TOKEN='troque-por-uma-senha-longa';
+const SYNC_KEY='heck-sync-queue-v1';
+let syncing=false;
+function getSyncQueue(){try{const q=JSON.parse(localStorage.getItem(SYNC_KEY)||'[]');return Array.isArray(q)?q:[]}catch{return[]}}
+function setSyncQueue(q){try{localStorage.setItem(SYNC_KEY,JSON.stringify(q))}catch{}}
+function queueSync(id){const q=getSyncQueue();if(!q.includes(id)){q.push(id);setSyncQueue(q)}}
+function sheetColumns(){const fs=schema.flatMap(s=>s.fields.filter(f=>f.id!=='s1q2'));return [['id','ID do registro'],['status','Situação'],...fs.map(f=>[f.id,f.label]),['updatedAt','Última atualização']]}
+async function syncOne(id){
+  const r=records.find(x=>x.id===id);
+  if(!r)return true;
+  const res=await fetch(SHEETS_URL,{method:'POST',body:JSON.stringify({token:SHEETS_TOKEN,columns:sheetColumns(),record:r})});
+  const j=await res.json();
+  return j.ok===true;
+}
+async function syncPending(){
+  if(syncing||!navigator.onLine||!SHEETS_URL.startsWith('https://'))return;
+  let q=getSyncQueue();
+  if(!q.length)return;
+  syncing=true;
+  let sent=0,failed=false;
+  try{
+    for(const id of [...q]){
+      try{
+        if(await syncOne(id)){q=q.filter(x=>x!==id);setSyncQueue(q);sent++}
+        else{failed=true;break}
+      }catch{failed=true;break}
+    }
+  }finally{syncing=false}
+  if(sent)notify(sent===1?'Coleta enviada para a planilha.':sent+' coletas enviadas para a planilha.');
+  else if(failed)notify('Não foi possível enviar à planilha. Será tentado de novo quando houver conexão.');
+}
+window.addEventListener('online',syncPending);
+syncPending();
