@@ -150,7 +150,7 @@ function bindPhotos(){
 // ===== Envio para o Google Planilhas (via Google Apps Script) =====
 // 1) URL do app da Web gerada na implantação do Apps Script.
 // 2) TOKEN igual ao que está no arquivo Codigo.gs.
-const SHEETS_URL='https://script.google.com/macros/s/AKfycbwMgEQWRv_euBDJl-Y5jXrr_zYio0GurX71OGz9zc2CylHflqNmYMPJfbEargUD9_LG/exec';
+const SHEETS_URL='https://script.google.com/macros/s/AKfycbxjKG7kiBSS6nO2X8zVbSCPsjlz48ingPxhJ6V5KB0ogY3qMLAklT_IzCk_RpV6BtMk/exec';
 const SHEETS_TOKEN='troque-por-uma-senha-longa';
 const SYNC_KEY='heck-sync-queue-v1';
 let syncing=false;
